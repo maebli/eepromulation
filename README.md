@@ -213,8 +213,20 @@ Writing `0xFFFF` to an address succeeds but is a no-op on flash.
 
 ### Drop-in C integration — release artifacts
 
-Every tagged release ships three files. Download them from the GitHub Releases
-page and pick the integration path that suits your build system.
+Every tagged release ships three files. Grab them with one command run from
+your project root:
+
+```sh
+# curl (macOS + Linux)
+curl -fsSLO https://github.com/maebli/eepromulation/releases/latest/download/eeprom.h \
+  && curl -fsSLO https://github.com/maebli/eepromulation/releases/latest/download/libeepromulation_stm32wl.a
+
+# wget (Linux)
+wget -q https://github.com/maebli/eepromulation/releases/latest/download/eeprom.h \
+        https://github.com/maebli/eepromulation/releases/latest/download/libeepromulation_stm32wl.a
+```
+
+Then pick the integration path that suits your build system.
 
 | File | Target | Notes |
 |---|---|---|
