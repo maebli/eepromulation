@@ -1,0 +1,30 @@
+# Helix editor language configuration for eepromulation
+# Sets up clangd LSP with compile_commands.json from the host-debug build,
+# and clang-format on save.
+
+[[language]]
+name = "cpp"
+language-servers = ["clangd"]
+formatter = { command = "clang-format", args = ["--style=file"] }
+auto-format = true
+
+[language-server.clangd]
+# Use the Nix clangd (same version as the build compiler) so system headers resolve correctly.
+# Apple's /usr/bin/clangd is clang-17; the project builds with clang-21 and Nix libc++.
+command = "/nix/store/rr64nnycczvx7s1b110qmvqrlfcb6lsm-clang-21.1.8/bin/clangd"
+args = [
+  "--compile-commands-dir=build/host-debug",
+  "--query-driver=/nix/store/*/bin/clang*",
+  "--background-index",
+  "--completion-style=detailed",
+  "--header-insertion=iwyu",
+  "--suggest-missing-includes",
+  "--fallback-style=Google",
+]
+# --clang-tidy removed: too slow on template-heavy code; run via cmake --build --target clang-tidy
+
+[[language]]
+name = "c"
+language-servers = ["clangd"]
+formatter = { command = "clang-format", args = ["--style=file"] }
+auto-format = true

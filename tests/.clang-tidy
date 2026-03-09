@@ -1,0 +1,10 @@
+---
+# Tests — inherit root config but suppress identifier naming.
+# Catch2 macros generate internal identifiers and test fixtures use
+# conventional (non-suffixed) member names, so naming checks are noisy here.
+
+Checks: >
+  -readability-identifier-naming
+
+WarningsAsErrors: ""
+...

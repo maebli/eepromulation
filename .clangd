@@ -1,0 +1,7 @@
+CompileFlags:
+  CompilationDatabase: build/host-debug
+  Add: [-ferror-limit=0]   # don't stop at 20 errors — show all diagnostics
+
+Diagnostics:
+  ClangTidy:
+    FastCheckFilter: None  # disable tidy in the editor; run it via `cmake --build --target clang-tidy`

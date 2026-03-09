@@ -1,0 +1,196 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "develop"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Stage 1: Lint — clang-tidy + cppcheck on the host build
+  # -------------------------------------------------------------------------
+  lint:
+    name: Lint (clang-tidy + cppcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Configure (host-debug)
+        run: nix develop --command cmake --preset host-debug
+
+      - name: Build (needed for compile_commands.json to be complete)
+        run: nix develop --command cmake --build build/host-debug
+
+      - name: Run clang-tidy
+        run: nix develop --command cmake --build build/host-debug --target clang-tidy
+
+      - name: Run cppcheck
+        run: nix develop --command cmake --build build/host-debug --target cppcheck
+
+  # -------------------------------------------------------------------------
+  # Stage 2: Test — Catch2 unit tests (host build)
+  # -------------------------------------------------------------------------
+  test:
+    name: Unit tests (Catch2, host)
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Configure
+        run: nix develop --command cmake --preset host-debug
+
+      - name: Build
+        run: nix develop --command cmake --build build/host-debug
+
+      - name: Run tests
+        run: nix develop --command ctest --preset host-debug --output-on-failure
+
+  # -------------------------------------------------------------------------
+  # Stage 3: Cross-build — arm-none-eabi-gcc ARM build
+  # -------------------------------------------------------------------------
+  cross-build:
+    name: Cross-compile (arm-none-eabi)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Configure (arm-debug)
+        run: nix develop --command cmake --preset arm-debug
+
+      - name: Build
+        run: nix develop --command cmake --build build/arm-debug
+
+      - name: Upload ELF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-elf
+          path: build/arm-debug/target/demo.elf
+
+  # -------------------------------------------------------------------------
+  # Stage 4: QEMU — run demo.elf in QEMU and assert exit 0
+  # -------------------------------------------------------------------------
+  qemu:
+    name: QEMU smoke test (lm3s6965evb)
+    runs-on: ubuntu-latest
+    needs: cross-build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - name: Download ELF artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: demo-elf
+          path: build/arm-debug/target/
+
+      - name: Run demo in QEMU (timeout 30s)
+        run: |
+          nix develop --command \
+            timeout 30 \
+            qemu-system-arm \
+              -M lm3s6965evb \
+              -kernel build/arm-debug/target/demo.elf \
+              -semihosting \
+              -nographic \
+              -no-reboot
+
+  # -------------------------------------------------------------------------
+  # Stage 5: Dist — amalgamation + prebuilt .a for STM32WL
+  #
+  # Produces two drop-in artifacts:
+  #   eeprom.h + eepromulation.cpp   (user compiles, C++20 required)
+  #   eeprom.h + libeepromulation_stm32wl.a  (user links only, no C++ needed)
+  # -------------------------------------------------------------------------
+  dist:
+    name: Build dist artifacts
+    runs-on: ubuntu-latest
+    needs: qemu
+    permissions:
+      contents: write   # required to create releases and upload assets
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      # ── Amalgamation ──────────────────────────────────────────────────────
+      - name: Generate amalgamation
+        run: nix develop --command python3 tools/amalgamate.py
+
+      # ── Prebuilt .a (Cortex-M4, soft-float — STM32WL) ────────────────────
+      - name: Configure STM32WL build
+        run: nix develop --command cmake --preset stm32wl-release
+
+      - name: Build libeepromulation_stm32wl.a
+        run: nix develop --command cmake --build build/stm32wl-release --target eepromulation_stm32wl
+
+      - name: Extract .a into dist/
+        run: |
+          nix develop --command cmake --install build/stm32wl-release --prefix /tmp/stm32wl-install
+          cp /tmp/stm32wl-install/lib/libeepromulation_stm32wl.a dist/
+          # dist/eeprom.h and dist/eepromulation.cpp written by amalgamate.py above
+
+      - name: Upload amalgamation
+        uses: actions/upload-artifact@v4
+        with:
+          name: eepromulation-amalgamation
+          path: |
+            dist/eeprom.h
+            dist/eepromulation.cpp
+
+      - name: Upload prebuilt library
+        uses: actions/upload-artifact@v4
+        with:
+          name: eepromulation-stm32wl-lib
+          path: |
+            dist/eeprom.h
+            dist/libeepromulation_stm32wl.a
+
+      # ── GitHub Release (tags only) ────────────────────────────────────────
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/eeprom.h
+            dist/eepromulation.cpp
+            dist/libeepromulation_stm32wl.a
+          body: |
+            ## Drop-in replacement for ST's AN2594 EEPROM emulation
+
+            ### Option A — prebuilt library (no C++ needed)
+            Copy `eeprom.h` and `libeepromulation_stm32wl.a` into your project.
+            Link with `-leepromulation_stm32wl`. No C++ compiler required.
+            Target: Cortex-M4, Thumb, soft-float (STM32WL55).
+
+            ### Option B — compile it yourself
+            Copy `eeprom.h` and `eepromulation.cpp` into your project.
+            Compile `eepromulation.cpp` as C++20 with `arm-none-eabi-g++`.
+            Configure page indices with `-DEEPROM_PAGE0_IDX=N -DEEPROM_PAGE1_IDX=M`.
+
+            See README for linker script and build system integration.

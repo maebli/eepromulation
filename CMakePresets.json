@@ -1,0 +1,101 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "host-debug",
+      "displayName": "Host · Debug",
+      "description": "Native clang build with tests (for development + CI lint/test)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "HOST_BUILD": "ON",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "host-release",
+      "displayName": "Host · Release",
+      "description": "Native clang release build",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "HOST_BUILD": "ON",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "arm-debug",
+      "displayName": "ARM · Debug",
+      "description": "Cross-compile for Cortex-M3 (lm3s6965evb QEMU)",
+      "inherits": "base",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi-toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "HOST_BUILD": "OFF"
+      }
+    },
+    {
+      "name": "arm-release",
+      "displayName": "ARM · Release",
+      "description": "Cross-compile optimised for Cortex-M3",
+      "inherits": "base",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi-toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "HOST_BUILD": "OFF"
+      }
+    },
+    {
+      "name": "stm32wl-debug",
+      "displayName": "STM32WL · Debug",
+      "description": "Cross-compile for STM32WL55JCxx (Cortex-M4)",
+      "inherits": "base",
+      "toolchainFile": "${sourceDir}/cmake/stm32wl-toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "HOST_BUILD": "OFF",
+        "BUILD_EXAMPLE_STM32WL": "ON"
+      }
+    },
+    {
+      "name": "stm32wl-release",
+      "displayName": "STM32WL · Release",
+      "description": "Cross-compile optimised for STM32WL55JCxx (Cortex-M4)",
+      "inherits": "base",
+      "toolchainFile": "${sourceDir}/cmake/stm32wl-toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "HOST_BUILD": "OFF",
+        "BUILD_EXAMPLE_STM32WL": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "host-debug",      "configurePreset": "host-debug"      },
+    { "name": "host-release",    "configurePreset": "host-release"    },
+    { "name": "arm-debug",       "configurePreset": "arm-debug"       },
+    { "name": "arm-release",     "configurePreset": "arm-release"     },
+    { "name": "stm32wl-debug",   "configurePreset": "stm32wl-debug"   },
+    { "name": "stm32wl-release", "configurePreset": "stm32wl-release" }
+  ],
+  "testPresets": [
+    {
+      "name": "host-debug",
+      "configurePreset": "host-debug",
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    }
+  ]
+}
